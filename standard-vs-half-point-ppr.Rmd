@@ -1,0 +1,117 @@
+---
+title: "Standard Scoring vs Half Point vs Full Point PPR"
+author: "Paul"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, message=FALSE, echo=FALSE, error=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+```
+
+```{r import files, message=FALSE, echo=FALSE}
+rusher <- read_csv('inputs/top-rusher-2018.csv') %>%
+    mutate(Player.fix = strsplit(Player, "[*]") %>% 
+            as.data.frame() %>% 
+            t %>% 
+            data.frame(stringsAsFactors = F) %>% 
+            pull(1)) %>%
+    mutate(Name = strsplit(Player.fix, "[\\]") %>% 
+            as.data.frame() %>% 
+            t %>% 
+            data.frame(stringsAsFactors = F) %>% 
+            pull(1)) %>%
+    select(-Player, -Player.fix) %>%
+    filter(!is.na(Tm), Rk <= 100)
+
+receiver <- read_csv('inputs/top-receiver-2018.csv') %>%
+    mutate(Player.fix = strsplit(Player, "[*]") %>% 
+            as.data.frame() %>% 
+            t %>% 
+            data.frame(stringsAsFactors = F) %>% 
+            pull(1)) %>%
+    mutate(Name = strsplit(Player.fix, "[\\]") %>% 
+            as.data.frame() %>% 
+            t %>% 
+            data.frame(stringsAsFactors = F) %>% 
+            pull(1)) %>%
+    select(-Player, -Player.fix) %>%
+    filter(!is.na(Tm), Rk <= 100)
+
+adp <- read_csv('inputs/adp-2018.csv')
+    
+```
+
+## Calculate fantasy points
+
+- Standard scoring
+- 0.5 Pt PPR scoring
+- Full Pt PPR scoring
+
+```{r calculating points}
+players <- full_join(rusher, receiver, by = c("Name")) %>%
+    mutate(Pos.x = ifelse(is.na(Pos.x), Pos.y, Pos.x)) %>%
+    replace(is.na(.), 0) %>%
+    mutate(std.points = (Yds.x / 10) + (Yds.y / 10) + (TD.x * 6) + (TD.y * 6) - (Fmb.x * 2) - (Fmb.y * 2)) %>%
+    mutate(half.points = (std.points + (Rec / 2))) %>%
+    mutate(full.points = (std.points + (Rec))) %>%
+    arrange(desc(std.points)) %>%
+    mutate(std.points.rank = row_number()) %>%
+    arrange(desc(half.points)) %>%
+    mutate(half.points.rank = row_number()) %>%
+    arrange(desc(full.points)) %>%
+    mutate(full.points.rank = row_number()) %>%
+    select(Name, Pos.x, std.points, half.points, full.points, std.points.rank, half.points.rank, full.points.rank)
+
+players_long <- select(players, -(std.points.rank:full.points.rank)) %>%
+    gather(scoring.type, scoring.value, std.points:full.points) 
+players_long_rank <- select(players, -(std.points:full.points)) %>%
+    gather(scoring.type, scoring.rank, std.points.rank:full.points.rank) %>%
+    mutate(scoring.type = gsub('.[^.]*$', '', scoring.type))
+```
+
+## Plot {.tabset}
+
+### ADP
+
+```{r adp plot, fig.width = 10}
+
+plot <- left_join(players_long, adp, by = c("Name")) %>%
+    mutate(scoring.type = factor(scoring.type, labels = c("Full Points", "Half Points", "Standard points"))) %>%
+    mutate(Pos.x = as.factor(Pos.x)) %>%
+    filter(Pos.x != "QB")
+
+g <- ggplot(data = plot, aes(x=Adp, y=scoring.value, color=Pos.x, label=Name)) +
+    geom_point(alpha = 0.8) +
+    facet_grid(cols = vars(scoring.type)) +
+    theme_minimal() +
+    ggtitle("Comparison between scoring formats") +
+    labs(x = "\nAverage Draft Position", y = "Fantasy Points\n\n\n\n", color = "Position")
+ggplotly(g)
+
+```
+
+### Rank
+
+```{r rank plot, fig.width = 10}
+
+plot <- left_join(players_long, players_long_rank, by = c("Name", "Pos.x", "scoring.type")) %>%
+    mutate(scoring.type = factor(scoring.type, labels = c("Full Points", "Half Points", "Standard points"))) %>%
+    mutate(Pos.x = as.factor(Pos.x)) %>%
+    filter(Pos.x != "QB")
+
+g <- ggplot(data = plot, aes(x=scoring.rank, y=scoring.value, color=Pos.x, label=Name)) +
+    geom_point(alpha = 0.5) +
+    facet_grid(cols = vars(scoring.type)) +
+    theme_minimal() +
+    ggtitle("Comparison between scoring formats") +
+    labs(x = "\nAverage Draft Position", y = "Fantasy Points\n\n\n\n", color = "Position")
+ggplotly(g)
+
+```
