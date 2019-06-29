@@ -111,7 +111,7 @@ g <- ggplot(data = plot, aes(x=scoring.rank, y=scoring.value, color=Pos.x, label
     facet_grid(cols = vars(scoring.type)) +
     theme_minimal() +
     ggtitle("Comparison between scoring formats") +
-    labs(x = "\nAverage Draft Position", y = "Fantasy Points\n\n\n\n", color = "Position")
+    labs(x = "\nOverall Ranking", y = "Fantasy Points\n\n\n\n", color = "Position")
 ggplotly(g)
 
 ```
